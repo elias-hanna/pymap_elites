@@ -70,13 +70,24 @@ def __evaluate(t):
     fit, desc = f(z)
     return cm.Species(z, desc, fit)
 
+# evaluate multiple vectors (x) with a function f and return a list of species
+# t = vector, function
+def __evaluate_multi(t):
+    z, f = t  # evaluate z with function f
+    fit, desc = f(z)
+    ret = []
+    for i in range(len(z)):
+        ret.append(cm.Species(z[i], desc[i], fit[i]))
+    return ret
+
 # map-elites algorithm (CVT variant)
 def compute(dim_map, dim_x, f,
             n_niches=1000,
             max_evals=1e5,
             params=cm.default_params,
             log_file=None,
-            variation_operator=cm.variation):
+            variation_operator=cm.variation,
+            all_pop_at_once=False):
     """CVT MAP-Elites
        Vassiliades V, Chatzilygeroudis K, Mouret JB. Using centroidal voronoi tessellations to scale up the multidimensional archive of phenotypic elites algorithm. IEEE Transactions on Evolutionary Computation. 2017 Aug 3;22(4):623-30.
 
@@ -104,7 +115,10 @@ def compute(dim_map, dim_x, f,
         if len(archive) <= params['random_init'] * n_niches:
             for i in range(0, params['random_init_batch']):
                 x = np.random.uniform(low=params['min'], high=params['max'], size=dim_x)
-                to_evaluate += [(x, f)]
+                if all_pop_at_once:
+                    to_evaluate += [x]
+                else:
+                    to_evaluate += [(x, f)]
         else:  # variation/selection loop
             keys = list(archive.keys())
             # we select all the parents at the same time because randint is slow
@@ -116,9 +130,15 @@ def compute(dim_map, dim_x, f,
                 y = archive[keys[rand2[n]]]
                 # copy & add variation
                 z = variation_operator(x.x, y.x, params)
-                to_evaluate += [(z, f)]
+                if all_pop_at_once:
+                    to_evaluate += [z]
+                else:
+                    to_evaluate += [(z, f)]
         # evaluation of the fitness for to_evaluate
-        s_list = cm.parallel_eval(__evaluate, to_evaluate, pool, params)
+        if all_pop_at_once:
+            s_list = evaluate_multi((to_evaluate, f))
+        else:
+            s_list = cm.parallel_eval(__evaluate, to_evaluate, pool, params)
         # natural selection
         for s in s_list:
             __add_to_archive(s, s.desc, archive, kdt)
