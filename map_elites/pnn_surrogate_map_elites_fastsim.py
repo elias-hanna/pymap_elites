@@ -165,7 +165,7 @@ def real_env_eval(xx):
     for i in range(len(xx)):
         trajs[0,:, i] = init_state
     
-        data_in, data_out = run_on_env(xx[i], horizon)
+        data_in, data_out = run_on_gym_env(real_env, xx[i], horizon)
 
         trajs[:-1,:,i] = data_in[:,2:]
         trajs[-1,:,i] = data_out[-1,:] + data_in[-1,2:]
@@ -185,13 +185,13 @@ def real_env_eval(xx):
     return fitness, bd
 
 # genotype shape for FastsimSimpleNavigationPos env: (number of weights of nn controller,)
-def run_on_env(genotype, horizon, display=False):
+def run_on_gym_env(env, genotype, horizon, display=False):
     # Initialize data containers that will retain whole trajectory
     data_in = np.zeros((horizon, input_dim))
     data_out = np.zeros((horizon, output_dim))
     to_input_controller = np.zeros((1, controller_input_dim))
 
-    obs = real_env.reset()
+    obs = env.reset()
     
     prev_action = None
     prev_obs = None
@@ -204,7 +204,7 @@ def run_on_env(genotype, horizon, display=False):
     # T time steps, but "done" can be attained before T is reached
     for t in range(horizon):
         if(display):
-            real_env.render()
+            env.render()
 
         action = controller_nn(obs) # compute next action
 
@@ -214,7 +214,7 @@ def run_on_env(genotype, horizon, display=False):
         prev_action = action
         prev_obs = obs
     
-        obs, reward, done, info = real_env.step(action)
+        obs, reward, done, info = env.step(action)
 
         if(t==0):
             continue
@@ -273,8 +273,23 @@ if __name__=='__main__':
 
     #-1#
     # Do init_evals trajectories on empty_env with NS algorithm and save the traj data for model learning. Idea is to first learn robot model.
-    
+    pop_size = 100
+    nb_gen = 50
+    # Population initialization
+    population = []
+    for i in range(pop_size):
+        rand_genotype = np.random.uniform(low=params["min"], high=params["max"], size=(n_weights,))
+        population.append(rand_genotype)
 
+    for i in range(nb_gen):
+        # -1)A) Evaluate the population
+        for j in range(pop_size):
+            data_in_to_add, data_out_to_add = run_on_gym_env(simplified_env,
+                                                             population[j], horizon)
+        
+        # -1)B) Update novelty score and archive
+
+        # -1)C) Selection and variation
     
 
     #0#
@@ -288,7 +303,7 @@ if __name__=='__main__':
         # Create a random genotype
         genotype = np.random.uniform(low=params["min"], high=params["max"], size=(n_weights,))
 
-        data_in_to_add, data_out_to_add = run_on_env(genotype, horizon)
+        data_in_to_add, data_out_to_add = run_on_gym_env(real_env, genotype, horizon)
 
         data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
         data_out[tab_cpt:tab_cpt+len(data_out_to_add),:] = data_out_to_add
@@ -379,7 +394,8 @@ if __name__=='__main__':
 
         # Test the N most uncertain individuals on real setup to gather new data
         for i in range(min(N, len(sorted_archive))):
-            data_in_to_add, data_out_to_add = run_on_env(sorted_archive[i][1].x, horizon)
+            data_in_to_add, data_out_to_add = run_on_gym_env(real_env,
+                                                             sorted_archive[i][1].x, horizon)
         
             data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
             data_out[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_out_to_add
