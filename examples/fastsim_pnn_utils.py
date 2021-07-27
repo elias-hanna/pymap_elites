@@ -31,7 +31,7 @@ stds_in = None
 means_out = None
 stds_out = None
 
-num_epochs = 3 # number of epochs when learning on gathered data
+num_epochs = 20 # number of epochs when learning on gathered data
 
 hidden_units = [500,500,500]
 batch_size = 256
@@ -50,7 +50,7 @@ controller_nnparams={"n_hidden_layers": 2, "n_neurons_per_hidden": 10} # same pa
 n_weights = SimpleNeuralController(controller_input_dim, controller_output_dim, params=controller_nnparams).n_weights
 
 # cvt map elites global params
-eval_batch_size = 1000
+eval_batch_size = 100
 
 # env run params
 init_random_trajs = 10
@@ -61,7 +61,7 @@ max_vel = 4
 init_angle = np.pi/4
 angular_state = np.array([np.sin(init_angle), np.cos(init_angle)])
 init_state = np.concatenate((np.array([60., 450.]), angular_state))
-horizon = 2000 # time steps on env (real and learned one)
+horizon = 400 # time steps on env (real and learned one)
 
 #### Standard normalization ####
 def normalize_data(data_in, data_out):
@@ -99,7 +99,6 @@ def fastsim_eval(xx):
     ## Initialize the controllers with population genotypes ##
     controllers = []
     for i in range(len(xx)):
-        # print(i,"th controller\n",xx[i])
         controllers.append(SimpleNeuralController(controller_input_dim,
                                                   controller_output_dim,
                                                   params=controller_nnparams))
@@ -135,9 +134,6 @@ def fastsim_eval(xx):
             # Create input vector to give to transition model PNN
             to_input[i,:2] = action
             to_input[i,2:] = np.transpose(trajs[t,:,i])
-            print(to_input)
-            print(means_in)
-            print(stds_in)
             to_input[i,:] = normalize_standard(to_input[i,:], means_in, stds_in) 
         # Predict using model
         output_distribution = pnn_loc.model(to_input)
@@ -159,7 +155,6 @@ def fastsim_eval(xx):
     for i in range(len(xx)):
         ## Compute BD (last ball position of closest observed trajectory to mean trajectory
         bd[i] = trajs[-1,:2,i]
-        print(bd[i])
         ## Compute fitness (sum of mean range over ball pose [x,y])
         mean_range = np.mean(trajs_stddev[:,:,i], axis=0)
         fitness[i] = -(mean_range[0] + mean_range[1])

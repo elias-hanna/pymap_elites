@@ -34,7 +34,7 @@ if __name__=='__main__':
     dim_map = 2
     dim_gen = fpu.n_weights
     n_niches = 10000
-    n_gen = 10
+    n_gen = 50
     max_evals = n_gen*fpu.eval_batch_size*fpu.horizon
     print("Max evals: ", max_evals)
     
