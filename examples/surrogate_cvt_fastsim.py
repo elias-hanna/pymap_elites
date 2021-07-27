@@ -33,10 +33,9 @@ if __name__=='__main__':
 
     dim_map = 2
     dim_gen = fpu.n_weights
-    n_niches = 10000
-    n_gen = 50
-    max_evals = n_gen*fpu.eval_batch_size*fpu.horizon
-    print("Max evals: ", max_evals)
+    n_niches = 1000
+    n_gen = 20
+    max_evals = n_gen*fpu.eval_batch_size
     
     # data containers
     data_in = np.zeros((fpu.horizon*fpu.init_random_trajs, fpu.input_dim))
@@ -115,7 +114,7 @@ if __name__=='__main__':
 
         #3#
         # Get the N most uncertain individuals and test them on real setup to gather data
-        N = 3 # Number of individuals that we'll try on real_env
+        N = 0.1*fpu.eval_batch_size # Number of individuals that we'll try on real_env
 
         sorted_archive = sorted( archive.items(), key=lambda pair: pair[1].fitness, reverse=True )[-N:]
 

@@ -179,17 +179,18 @@ def __write_centroids(centroids):
             f.write('\n')
 
 
-def cvt(k, dim, samples, cvt_use_cache=True):
+def cvt(k, dim, params):
     # check if we have cached values
     fname = __centroids_filename(k, dim)
-    if cvt_use_cache:
+    if params["cvt_use_cache"]:
         if Path(fname).is_file():
             print("WARNING: using cached CVT:", fname)
             return np.loadtxt(fname)
     # otherwise, compute cvt
     print("Computing CVT (this can take a while...):", fname)
 
-    x = np.random.rand(samples, dim)
+    # x = np.random.rand(samples, dim)
+    x = np.random.uniform(low=params["bd_min"], high=params["bd_max"], size=(params['cvt_samples'],dim))
     k_means = KMeans(init='k-means++', n_clusters=k,
                      n_init=1, n_jobs=-1, verbose=1)#,algorithm="full")
     k_means.fit(x)
