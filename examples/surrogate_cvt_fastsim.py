@@ -5,44 +5,8 @@ import map_elites.common as cm_map_elites
 
 # Utils import
 import fastsim_pnn_utils as fpu
+import numpy as np
 
-# Model global learning params
-means_in = None
-stds_in = None
-means_out = None
-stds_out = None
-
-num_epochs = 30 # number of epochs when learning on gathered data
-
-hidden_units = [500,500,500]
-batch_size = 256
-train_prop = 0.85 # ratio in data of training / testing
-learning_rate = 0.001
-input_dim = real_env.action_space.shape[0] + real_env.observation_space.shape[0] + 1 # +1 to make up for the angular state that is divided in two
-output_dim = real_env.observation_space.shape[0] + 1 # +1 to make up for the angular state that is divided in two
-
-pnn = ProbabilisticNeuralNetwork(input_dim=input_dim, output_dim=output_dim, train_prop=train_prop,
-                                 batch_size=batch_size, learning_rate=learning_rate, hidden_units=hidden_units)
-
-# Robot controller params
-controller_input_dim = real_env.observation_space.shape[0]
-controller_output_dim = real_env.action_space.shape[0]
-controller_nnparams={"n_hidden_layers": 2, "n_neurons_per_hidden": 10} # same params as ran NS experiment 
-n_weights = SimpleNeuralController(controller_input_dim, controller_output_dim, params=controller_nnparams).n_weights
-
-# cvt map elites global params
-eval_batch_size = 1000
-
-# env run params
-init_random_trajs = 100
-
-max_vel = 4
-
-# some other global params
-init_angle = np.pi/4
-angular_state = np.array([np.sin(init_angle), np.cos(init_angle)])
-init_state = np.concatenate((np.array([60., 450.]), angular_state))
-horizon = 2000 # time steps on env (real and learned one)
 
 if __name__=='__main__':
     ### run params ###
@@ -53,9 +17,9 @@ if __name__=='__main__':
     params = \
     {
         "cvt_samples": 25000,
-        "batch_size": eval_batch_size,
+        "batch_size": fpu.eval_batch_size,
         "random_init": 0.01,
-        "random_init_batch": eval_batch_size,
+        "random_init_batch": fpu.eval_batch_size,
         "iso_sigma": 0.01,
         "line_sigma": 0.2,
         "dump_period": 2,
@@ -68,13 +32,15 @@ if __name__=='__main__':
     }
 
     dim_map = 2
-    dim_gen = n_weights
+    dim_gen = fpu.n_weights
     n_niches = 10000
     n_gen = 10
+    max_evals = n_gen*fpu.eval_batch_size*fpu.horizon
+    print("Max evals: ", max_evals)
     
     # data containers
-    data_in = np.zeros((horizon*init_random_trajs, input_dim))
-    data_out = np.zeros((horizon*init_random_trajs, output_dim))
+    data_in = np.zeros((fpu.horizon*fpu.init_random_trajs, fpu.input_dim))
+    data_out = np.zeros((fpu.horizon*fpu.init_random_trajs, fpu.output_dim))
 
     #-1#
     # Do init_evals trajectories on empty_env with NS algorithm and save the traj data for model learning. Idea is to first learn robot model.
@@ -82,15 +48,15 @@ if __name__=='__main__':
     nb_gen = 50
     # Population initialization
     population = []
-    for i in range(pop_size):
-        rand_genotype = np.random.uniform(low=params["min"], high=params["max"], size=(n_weights,))
-        population.append(rand_genotype)
+    # for i in range(pop_size):
+    #     rand_genotype = np.random.uniform(low=params["min"], high=params["max"], size=(fpu.n_weights,))
+    #     population.append(rand_genotype)
 
-    for i in range(nb_gen):
-        # -1)A) Evaluate the population
-        for j in range(pop_size):
-            data_in_to_add, data_out_to_add = run_on_gym_env(simplified_env,
-                                                             population[j], horizon)
+    # for i in range(nb_gen):
+    #     # -1)A) Evaluate the population
+    #     for j in range(pop_size):
+    #         data_in_to_add, data_out_to_add = fpu.run_on_gym_env(fpu.simplified_env,
+    #                                                          population[j], fpu.horizon)
         
         # -1)B) Update novelty score and archive
 
@@ -104,32 +70,21 @@ if __name__=='__main__':
     # output: trajs
     # Note: this type of init works for envs that are run with a unique action at beginning (not action trajs)
     tab_cpt = 0
-    for i in range(init_random_trajs):
+    for i in range(fpu.init_random_trajs):
         # Create a random genotype
-        genotype = np.random.uniform(low=params["min"], high=params["max"], size=(n_weights,))
+        genotype = np.random.uniform(low=params["min"], high=params["max"], size=(fpu.n_weights,))
 
-        data_in_to_add, data_out_to_add = run_on_gym_env(real_env, genotype, horizon)
+        data_in_to_add, data_out_to_add = fpu.run_on_gym_env(fpu.real_env, genotype, fpu.horizon)
 
         data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
         data_out[tab_cpt:tab_cpt+len(data_out_to_add),:] = data_out_to_add
                
-        print("{:.1f}".format(i/init_random_trajs*100),"% done", end="\r")
+        print("{:.1f}".format(i/fpu.init_random_trajs*100),"% done", end="\r")
         tab_cpt += len(data_in_to_add)
 
     # filter out 0 lines that were left
     data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)] 
     data_out_no_0s = data_out[~np.all(data_in == 0, axis=1)]
-
-    # for i in range(len(data_in)):
-    #     print(data_in[i], " - ", data_out[i])
-    
-    # unique_data_in, index = np.unique(data_in, axis=0, return_index=True)
-    # unique_data_out = np.take(data_out, index, axis=0)
-    # for i in range(init_random_trajs):
-    #     print("example")
-    #     print(unique_data_in[i])
-    #     print("corresponding label")
-    #     print(unique_data_out[i])
 
     max_iter = 10
     convergence_thresh = 0.1
@@ -138,41 +93,27 @@ if __name__=='__main__':
 
         #1#
         # Normalize training data
-        normalized_data_in = np.zeros(data_in_no_0s.shape)
-        normalized_data_out = np.zeros(data_out_no_0s.shape)
-
-        #### Standard normalization ####
-        means_in = [np.mean(data_in_no_0s[:,dim]) for dim in range(input_dim)]
-        stds_in = [np.std(data_in_no_0s[:,dim]) for dim in range(input_dim)]
-        means_out = [np.mean(data_out_no_0s[:,dim]) for dim in range(output_dim)]
-        stds_out = [np.std(data_out_no_0s[:,dim]) for dim in range(output_dim)]
-
-        for dim in range(input_dim):
-            normalized_data_in[:, dim] = (data_in_no_0s[:,dim] - means_in[dim])/stds_in[dim]
-
-        for dim in range(output_dim):
-            normalized_data_out[:, dim] = (data_out_no_0s[:,dim] - means_out[dim])/stds_out[dim]
+        normalized_data_in, normalized_data_out = fpu.normalize_data(data_in_no_0s, data_out_no_0s)
         
         # Learn a model from the gathered data
-        train_dataset, test_dataset = pnn.get_train_and_test_splits(normalized_data_in, normalized_data_out)
+        train_dataset, test_dataset = fpu.pnn.get_train_and_test_splits(normalized_data_in, normalized_data_out)
 
-        # simple_nn = SimpleNeuralNetwork(input_dim=input_dim, output_dim=output_dim, train_prop=train_prop,
+        # simple_nn = SimpleNeuralNetwork(input_dim=fpu.input_dim, output_dim=fpu.output_dim, train_prop=train_prop,
                                         # batch_size=batch_size, learning_rate=learning_rate, hidden_units=hidden_units,
                                         # loss=loss)
         # simple_nn.create_model()
-        # simple_nn.run_experiment(train_dataset, test_dataset, num_epochs)
-        pnn.create_model()
-        pnn.run_experiment(train_dataset, test_dataset, num_epochs)
+        # simple_nn.run_experiment(train_dataset, test_dataset, fpu.num_epochs)
+        fpu.pnn.create_model()
+        fpu.pnn.run_experiment(train_dataset, test_dataset, fpu.num_epochs)
 
         # Perform CVT map elites computation on learned model
         # archive = compute(dim_map, dim_gen, fastsim_eval, n_niches=n_niches, n_gen=n_gen, params=params)
         # archive is made of a collection of species
         # archive = compute(dim_map, dim_gen, fastsim_test_eval, n_niches=n_niches, n_gen=n_gen, params=params)
-        archive = compute_step(dim_map, dim_gen, fastsim_eval, n_niches=n_niches, n_gen=n_gen, params=params)
-        # archive = compute_step(dim_map, dim_gen, real_env_eval, n_niches=n_niches, n_gen=n_gen, params=params) # just to test cvt archive
+        archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.fastsim_eval, n_niches=n_niches, max_evals=max_evals, params=params, all_pop_at_once=True)
+        # archive = compute_step(dim_map, dim_gen, fpu.real_env_eval, n_niches=n_niches, n_gen=n_gen, params=params) # just to test cvt archive
 
         #3#
-
         # Get the N most uncertain individuals and test them on real setup to gather data
         N = 3 # Number of individuals that we'll try on real_env
 
@@ -189,8 +130,8 @@ if __name__=='__main__':
         #4#
 
         # reset data containers while maintaining previous data
-        tmp_data_in = np.zeros((len(data_in_no_0s)+horizon*N, input_dim))
-        tmp_data_out = np.zeros((len(data_out_no_0s)+horizon*N, output_dim))
+        tmp_data_in = np.zeros((len(data_in_no_0s)+fpu.horizon*N, fpu.input_dim))
+        tmp_data_out = np.zeros((len(data_out_no_0s)+fpu.horizon*N, fpu.output_dim))
 
         tmp_data_in[:tab_cpt,:] = data_in_no_0s
         tmp_data_out[:tab_cpt,:] = data_out_no_0s
@@ -199,8 +140,8 @@ if __name__=='__main__':
 
         # Test the N most uncertain individuals on real setup to gather new data
         for i in range(min(N, len(sorted_archive))):
-            data_in_to_add, data_out_to_add = run_on_gym_env(real_env,
-                                                             sorted_archive[i][1].x, horizon)
+            data_in_to_add, data_out_to_add = fpu.run_on_gym_env(fpu.real_env,
+                                                             sorted_archive[i][1].x, fpu.horizon)
         
             data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
             data_out[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_out_to_add

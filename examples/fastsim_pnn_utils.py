@@ -31,7 +31,7 @@ stds_in = None
 means_out = None
 stds_out = None
 
-num_epochs = 30 # number of epochs when learning on gathered data
+num_epochs = 3 # number of epochs when learning on gathered data
 
 hidden_units = [500,500,500]
 batch_size = 256
@@ -53,7 +53,7 @@ n_weights = SimpleNeuralController(controller_input_dim, controller_output_dim, 
 eval_batch_size = 1000
 
 # env run params
-init_random_trajs = 100
+init_random_trajs = 10
 
 max_vel = 4
 
@@ -63,6 +63,26 @@ angular_state = np.array([np.sin(init_angle), np.cos(init_angle)])
 init_state = np.concatenate((np.array([60., 450.]), angular_state))
 horizon = 2000 # time steps on env (real and learned one)
 
+#### Standard normalization ####
+def normalize_data(data_in, data_out):
+  global means_in, stds_in, means_out, stds_out
+  normalized_data_in = np.zeros(data_in.shape)
+  normalized_data_out = np.zeros(data_out.shape)
+  
+  means_in = [np.mean(data_in[:,dim]) for dim in range(input_dim)]
+  stds_in = [np.std(data_in[:,dim]) for dim in range(input_dim)]
+  means_out = [np.mean(data_out[:,dim]) for dim in range(output_dim)]
+  stds_out = [np.std(data_out[:,dim]) for dim in range(output_dim)]
+
+  for dim in range(input_dim):
+    normalized_data_in[:, dim] = (data_in[:,dim] - means_in[dim])/stds_in[dim]
+    
+  for dim in range(output_dim):
+    normalized_data_out[:, dim] = (data_out[:,dim] - means_out[dim])/stds_out[dim]
+
+  return normalized_data_in, normalized_data_out
+
+    
 def pnn_eval(to_evaluate): 
     inputs, pnn_weights = to_evaluate
 
@@ -115,6 +135,9 @@ def fastsim_eval(xx):
             # Create input vector to give to transition model PNN
             to_input[i,:2] = action
             to_input[i,2:] = np.transpose(trajs[t,:,i])
+            print(to_input)
+            print(means_in)
+            print(stds_in)
             to_input[i,:] = normalize_standard(to_input[i,:], means_in, stds_in) 
         # Predict using model
         output_distribution = pnn_loc.model(to_input)

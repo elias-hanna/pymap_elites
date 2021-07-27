@@ -136,7 +136,7 @@ def compute(dim_map, dim_x, f,
                     to_evaluate += [(z, f)]
         # evaluation of the fitness for to_evaluate
         if all_pop_at_once:
-            s_list = evaluate_multi((to_evaluate, f))
+            s_list = __evaluate_multi((to_evaluate, f))
         else:
             s_list = cm.parallel_eval(__evaluate, to_evaluate, pool, params)
         # natural selection
