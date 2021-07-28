@@ -210,5 +210,6 @@ if __name__ == "__main__":
     axes.yaxis.tick_left()
 
     plot_cvt(axes, centroids, fit, beh, x,2,4, min_fit, max_fit)
-    fig.savefig('cvt.pdf')
-    fig.savefig('cvt.png')
+    # fig.savefig('cvt.pdf')
+    filename = sys.argv[2][:-4] # remove .dat
+    fig.savefig(filename + '_cvt.png')

@@ -61,7 +61,7 @@ max_vel = 4
 init_angle = np.pi/4
 angular_state = np.array([np.sin(init_angle), np.cos(init_angle)])
 init_state = np.concatenate((np.array([60., 450.]), angular_state))
-horizon = 400 # time steps on env (real and learned one)
+horizon = 2000 # time steps on env (real and learned one)
 
 #### Standard normalization ####
 def normalize_data(data_in, data_out):

@@ -81,13 +81,14 @@ def __evaluate_multi(t):
     return ret
 
 # map-elites algorithm (CVT variant)
-def compute(dim_map, dim_x, f,
+def compute(dim_map, dim_x, f, prev_archive={},
             n_niches=1000,
             max_evals=1e5,
             params=cm.default_params,
             log_file=None,
             variation_operator=cm.variation,
-            all_pop_at_once=False):
+            all_pop_at_once=False,
+            iter_number=0):
     """CVT MAP-Elites
        Vassiliades V, Chatzilygeroudis K, Mouret JB. Using centroidal voronoi tessellations to scale up the multidimensional archive of phenotypic elites algorithm. IEEE Transactions on Evolutionary Computation. 2017 Aug 3;22(4):623-30.
 
@@ -103,7 +104,7 @@ def compute(dim_map, dim_x, f,
     kdt = KDTree(c, leaf_size=30, metric='euclidean')
     cm.__write_centroids(c)
 
-    archive = {} # init archive (empty)
+    archive = prev_archive # init archive (empty or one given as input)
     n_evals = 0 # number of evaluations since the beginning
     b_evals = 0 # number evaluation since the last dump
 
@@ -148,7 +149,7 @@ def compute(dim_map, dim_x, f,
         # write archive
         if b_evals >= params['dump_period'] and params['dump_period'] != -1:
             print("[{}/{}]".format(n_evals, int(max_evals)), end=" ", flush=True)
-            cm.__save_archive(archive, n_evals)
+            cm.__save_archive(archive, n_evals, iter_number)
             b_evals = 0
         # write log
         if log_file != None:
@@ -157,5 +158,5 @@ def compute(dim_map, dim_x, f,
                     fit_list.max(), np.mean(fit_list), np.median(fit_list),
                     np.percentile(fit_list, 5), np.percentile(fit_list, 95)))
             log_file.flush()
-    cm.__save_archive(archive, n_evals)
+    cm.__save_archive(archive, n_evals, iter_number)
     return archive

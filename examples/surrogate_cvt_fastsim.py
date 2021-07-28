@@ -86,9 +86,12 @@ if __name__=='__main__':
     data_out_no_0s = data_out[~np.all(data_in == 0, axis=1)]
 
     max_iter = 10
+    itr = 0
     convergence_thresh = 0.1
     has_converged = False # If uncertainty of less certain trajectory is below threshold ?
-    while (max_iter > 0 or not has_converged):
+    archive = {}
+    
+    while (itr < max_iter or not has_converged):
 
         #1#
         # Normalize training data
@@ -109,16 +112,19 @@ if __name__=='__main__':
         # archive = compute(dim_map, dim_gen, fastsim_eval, n_niches=n_niches, n_gen=n_gen, params=params)
         # archive is made of a collection of species
         # archive = compute(dim_map, dim_gen, fastsim_test_eval, n_niches=n_niches, n_gen=n_gen, params=params)
-        archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.fastsim_eval, n_niches=n_niches, max_evals=max_evals, params=params, all_pop_at_once=True)
+        archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.fastsim_eval, prev_archive=archive,
+                                         n_niches=n_niches, max_evals=max_evals, params=params,
+                                         all_pop_at_once=True, iter_number=itr)
         # archive = compute_step(dim_map, dim_gen, fpu.real_env_eval, n_niches=n_niches, n_gen=n_gen, params=params) # just to test cvt archive
 
         #3#
         # Get the N most uncertain individuals and test them on real setup to gather data
-        N = 0.1*fpu.eval_batch_size # Number of individuals that we'll try on real_env
+        N = round(0.5*fpu.eval_batch_size) # Number of individuals that we'll try on real_env
 
-        sorted_archive = sorted( archive.items(), key=lambda pair: pair[1].fitness, reverse=True )[-N:]
+        sorted_archive = sorted(archive.items(), key=lambda pair: pair[1].fitness, reverse=False)
 
-        print("N most uncertain archive individuals fitnesses:")
+        print("Archive len: ", len(sorted_archive))
+        print(N, " most uncertain archive individuals fitnesses:")
         for i in sorted_archive:
             print(i[1].fitness)
 
@@ -152,6 +158,6 @@ if __name__=='__main__':
         data_out_no_0s = data_out[~np.all(data_in == 0, axis=1)]
 
         # Reduce iteration number
-        max_iter -= 1
+        itr += 1
 
     print("Finished learning.")
