@@ -25,6 +25,11 @@ def normalize_standard(vector, mean_vector, std_vector):
 def rescale_standard(vector, mean_vector, std_vector):
   return [vector[i]*std_vector[i] + mean_vector[i] for i in range(len(vector))]
 
+def normalize_controller_input(vector):
+  min_vector = [0, 0, -np.pi]
+  max_vector = [600, 600, np.pi]
+  return [(vector[i] - min_vector[i])/(max_vector[i]- min_vector[i]) for i in range(len(vector))]
+
 # Model global learning params
 means_in = None
 stds_in = None
@@ -128,6 +133,7 @@ def fastsim_eval(xx):
             # Compute action given last observed state/predicted state
             to_input_controller = np.concatenate((prev_step[:2], 
                                                   [np.arctan2(prev_step[2], prev_step[3])]))
+            to_input_controller = normalize_controller_input(to_input_controller)
             action = controllers[i](to_input_controller) # compute next action
             action[action>max_vel] = max_vel
             action[action<-max_vel] = -max_vel
@@ -215,7 +221,8 @@ def run_on_gym_env(env, genotype, horizon, display=False):
         if(display):
             env.render()
 
-        action = controller_nn(obs) # compute next action
+        # action = controller_nn(obs) # compute next action
+        action = controller_nn(normalize_controller_input(obs)) # compute next action
 
         action[action>max_vel] = max_vel
         action[action<-max_vel] = -max_vel

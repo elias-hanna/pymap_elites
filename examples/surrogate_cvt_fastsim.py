@@ -3,6 +3,9 @@
 import map_elites.cvt as cvt_map_elites
 import map_elites.common as cm_map_elites
 
+# from scipy.spatial import cKDTree : TODO -- faster?
+from sklearn.neighbors import KDTree
+
 # Utils import
 import fastsim_pnn_utils as fpu
 import numpy as np
@@ -22,7 +25,7 @@ if __name__=='__main__':
         "random_init_batch": fpu.eval_batch_size,
         "iso_sigma": 0.01,
         "line_sigma": 0.2,
-        "dump_period": 2,
+        "dump_period": 100000,
         "parallel": True,
         "cvt_use_cache": True,
         "min": -5,
@@ -89,8 +92,8 @@ if __name__=='__main__':
     itr = 0
     convergence_thresh = 0.1
     has_converged = False # If uncertainty of less certain trajectory is below threshold ?
-    archive = {}
-    
+    surrogate_archive = {}
+    real_archive = {}
     while (itr < max_iter or not has_converged):
 
         #1#
@@ -109,30 +112,31 @@ if __name__=='__main__':
         fpu.pnn.run_experiment(train_dataset, test_dataset, fpu.num_epochs)
 
         # Perform CVT map elites computation on learned model
-        # archive = compute(dim_map, dim_gen, fastsim_eval, n_niches=n_niches, n_gen=n_gen, params=params)
         # archive is made of a collection of species
-        # archive = compute(dim_map, dim_gen, fastsim_test_eval, n_niches=n_niches, n_gen=n_gen, params=params)
-        archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.fastsim_eval, prev_archive=archive,
+        surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.fastsim_eval, prev_archive=real_archive,
                                          n_niches=n_niches, max_evals=max_evals, params=params,
                                          all_pop_at_once=True, iter_number=itr)
-        # archive = compute_step(dim_map, dim_gen, fpu.real_env_eval, n_niches=n_niches, n_gen=n_gen, params=params) # just to test cvt archive
+        # surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.real_env_eval, prev_archive=real_archive,
+        #                                  n_niches=n_niches, max_evals=max_evlas, params=params,
+        #                                  all_pop_at_once=True, iter_number=itr) # to test cvt alg
 
         #3#
         # Get the N most uncertain individuals and test them on real setup to gather data
-        N = round(0.5*fpu.eval_batch_size) # Number of individuals that we'll try on real_env
 
-        sorted_archive = sorted(archive.items(), key=lambda pair: pair[1].fitness, reverse=False)
+        sorted_archive = sorted(surrogate_archive.items(), key=lambda pair: pair[1].fitness, reverse=False)
 
         print("Archive len: ", len(sorted_archive))
-        print(N, " most uncertain archive individuals fitnesses:")
-        for i in sorted_archive:
-            print(i[1].fitness)
-
+        
         if (sorted_archive[0][1].fitness > -convergence_thresh):
             print("Algorithm has converged")
             break
         
         #4#
+        # N = round(1.0*fpu.eval_batch_size) # Number of individuals that we'll try on real_env
+        N = len(sorted_archive) # Like in Antoine Cully paper, test all imagined archive
+        print(N, " most uncertain archive individuals fitnesses:")
+        for ind in sorted_archive[:N]:
+            print(ind[1].fitness)
 
         # reset data containers while maintaining previous data
         tmp_data_in = np.zeros((len(data_in_no_0s)+fpu.horizon*N, fpu.input_dim))
@@ -144,15 +148,28 @@ if __name__=='__main__':
         data_out = tmp_data_out
 
         # Test the N most uncertain individuals on real setup to gather new data
+        # and update the archive at the same time
+        # create the cvt
+        c = cm_map_elites.cvt(n_niches, dim_map, params)
+        kdt = KDTree(c, leaf_size=30, metric='euclidean')
+
         for i in range(min(N, len(sorted_archive))):
+            ind = sorted_archive[i][1] # (centroid, Species) tuple
             data_in_to_add, data_out_to_add = fpu.run_on_gym_env(fpu.real_env,
                                                              sorted_archive[i][1].x, fpu.horizon)
         
             data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
             data_out[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_out_to_add
-
+            
+            s = sorted_archive[i][1] # Species type
+            s.centroid = None
+            s.desc = np.add(fpu.rescale_standard(data_in_to_add[-1,2:4], fpu.means_in, fpu.stds_in), fpu.rescale_standard(data_out_to_add[-1,:2], fpu.means_out, fpu.stds_out)) # replace imagined desc by real desc
+            cvt_map_elites.__add_to_archive(s, s.desc, real_archive, kdt)
+            # we could change fitness on a another base also?
+            
             tab_cpt += len(data_in_to_add)
 
+        cm_map_elites.__save_archive(real_archive, max_evals, itr)
         # filter out 0 lines that were left
         data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)] 
         data_out_no_0s = data_out[~np.all(data_in == 0, axis=1)]
