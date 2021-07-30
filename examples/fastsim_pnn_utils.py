@@ -36,7 +36,7 @@ stds_in = None
 means_out = None
 stds_out = None
 
-num_epochs = 20 # number of epochs when learning on gathered data
+num_epochs = 10 # number of epochs when learning on gathered data
 
 hidden_units = [500,500,500]
 batch_size = 256
@@ -253,4 +253,4 @@ def run_on_gym_env(env, genotype, horizon, display=False):
     # format data
     data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)]
     data_out_no_0s = data_out[~np.all(data_in == 0, axis=1)] # filter out the same lines as for data_in
-    return data_in_no_0s, data_out_no_0s
+    return data_in_no_0s, data_out_no_0s, obs

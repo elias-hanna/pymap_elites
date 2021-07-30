@@ -76,7 +76,9 @@ if __name__=='__main__':
         # Create a random genotype
         genotype = np.random.uniform(low=params["min"], high=params["max"], size=(fpu.n_weights,))
 
-        data_in_to_add, data_out_to_add = fpu.run_on_gym_env(fpu.real_env, genotype, fpu.horizon)
+        data_in_to_add, data_out_to_add, last_obs = fpu.run_on_gym_env(fpu.real_env,
+                                                             genotype,
+                                                             fpu.horizon)
 
         data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
         data_out[tab_cpt:tab_cpt+len(data_out_to_add),:] = data_out_to_add
@@ -155,19 +157,35 @@ if __name__=='__main__':
 
         for i in range(min(N, len(sorted_archive))):
             ind = sorted_archive[i][1] # (centroid, Species) tuple
-            data_in_to_add, data_out_to_add = fpu.run_on_gym_env(fpu.real_env,
-                                                             sorted_archive[i][1].x, fpu.horizon)
+            data_in_to_add, data_out_to_add, last_obs = fpu.run_on_gym_env(fpu.real_env,
+                                                                 sorted_archive[i][1].x,
+                                                                 fpu.horizon)
         
-            data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
-            data_out[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_out_to_add
+            # Create a new Species indiv
+            desc = np.add(data_in_to_add[-1,2:4], data_out_to_add[-1,:2])
+
+            if desc[0]>300:
+                data_in_to_add, data_out_to_add, last_obs = fpu.run_on_gym_env(fpu.real_env,
+                                                                 sorted_archive[i][1].x,
+                                                                               fpu.horizon,
+                                                                               display=True)
+                print("LAST OBS FOR THIS ONE:", last_obs)
+                print("PREVIOUSLY GIVEN ONE:", desc)
+                print("\n\n\n\n\n\n")
             
-            s = sorted_archive[i][1] # Species type
-            s.centroid = None
-            s.desc = np.add(fpu.rescale_standard(data_in_to_add[-1,2:4], fpu.means_in, fpu.stds_in), fpu.rescale_standard(data_out_to_add[-1,:2], fpu.means_out, fpu.stds_out)) # replace imagined desc by real desc
-            cvt_map_elites.__add_to_archive(s, s.desc, real_archive, kdt)
+            s = cm_map_elites.Species(sorted_archive[i][1].x, desc, sorted_archive[i][1].fitness)
+            # Add to archive
+            added = cvt_map_elites.__add_to_archive(s, s.desc, real_archive, kdt)
             # we could change fitness on a another base also?
+
+            # added = 1 if individual was added to archive, 0 otherwise
+            # Only add the data if its new
+            print(desc, " - ", last_obs)
+            if(added):
+                data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
+                data_out[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_out_to_add
             
-            tab_cpt += len(data_in_to_add)
+                tab_cpt += len(data_in_to_add)
 
         cm_map_elites.__save_archive(real_archive, max_evals, itr)
         # filter out 0 lines that were left
