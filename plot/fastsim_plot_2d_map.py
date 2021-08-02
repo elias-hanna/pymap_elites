@@ -46,6 +46,7 @@ from sklearn.neighbors import KDTree
 import matplotlib.cm as cm
 
 my_cmap = cm.viridis
+norm = None
 
 def voronoi_finite_polygons_2d(vor, radius=None):
     """
@@ -136,10 +137,11 @@ def load_data(filename, dim,dim_x):
     print("Loading ",filename)
     data = np.loadtxt(filename)
     print("Data:",data)
-    fit = data[:, 0:1]
-    desc = data[:,1: dim+1]
-    x = data[:,dim+1:dim+1+dim_x]
-
+    fit = data[:-1, 0:1]
+    desc = data[:-1,1: dim+1]
+    x = data[:-1,dim+1:dim+1+dim_x]
+    total_evals = data[-1,:]
+    print(total_evals)
     return fit, desc, x
 
 def load_centroids(filename):
@@ -147,6 +149,7 @@ def load_centroids(filename):
     return points
 
 def plot_cvt(ax, centroids, fit, desc, x,dim1,dim2, min_fit, max_fit):
+    global norm
     # compute Voronoi tesselation
     print("Voronoi...")
     vor = Voronoi(centroids[:,0:2])
@@ -208,7 +211,7 @@ if __name__ == "__main__":
     axes.set_ylim(axes.get_ylim()[::-1])        # invert the axis
     axes.xaxis.tick_top()                     # and move the X-Axis
     axes.yaxis.tick_left()
-
+    fig.colorbar(cm.ScalarMappable(norm=norm, cmap=my_cmap))
     plot_cvt(axes, centroids, fit, beh, x,2,4, min_fit, max_fit)
     # fig.savefig('cvt.pdf')
     filename = sys.argv[2][:-4] # remove .dat

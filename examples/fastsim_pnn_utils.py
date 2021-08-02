@@ -207,7 +207,10 @@ def run_on_gym_env(env, genotype, horizon, display=False):
     to_input_controller = np.zeros((1, controller_input_dim))
 
     obs = env.reset()
-    
+
+    if(display):
+        env.enable_display()
+        
     prev_action = None
     prev_obs = None
 
@@ -248,7 +251,7 @@ def run_on_gym_env(env, genotype, horizon, display=False):
             break
     
         if(display):
-            time.sleep(0.0001)
+            time.sleep(0.001)
 
     # format data
     data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)]

@@ -25,7 +25,7 @@ if __name__=='__main__':
         "random_init_batch": fpu.eval_batch_size,
         "iso_sigma": 0.01,
         "line_sigma": 0.2,
-        "dump_period": 100000,
+        "dump_period": -1,
         "parallel": True,
         "cvt_use_cache": True,
         "min": -5,
@@ -39,6 +39,9 @@ if __name__=='__main__':
     n_niches = 1000
     n_gen = 20
     max_evals = n_gen*fpu.eval_batch_size
+
+    real_env_evals = 0
+    learned_env_evals = 0
     
     # data containers
     data_in = np.zeros((fpu.horizon*fpu.init_random_trajs, fpu.input_dim))
@@ -85,6 +88,7 @@ if __name__=='__main__':
                
         print("{:.1f}".format(i/fpu.init_random_trajs*100),"% done", end="\r")
         tab_cpt += len(data_in_to_add)
+        real_env_evals += 1
 
     # filter out 0 lines that were left
     data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)] 
@@ -115,7 +119,7 @@ if __name__=='__main__':
 
         # Perform CVT map elites computation on learned model
         # archive is made of a collection of species
-        surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.fastsim_eval, prev_archive=real_archive,
+        surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.fastsim_eval, prev_archive=real_archive.copy(),
                                          n_niches=n_niches, max_evals=max_evals, params=params,
                                          all_pop_at_once=True, iter_number=itr)
         # surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.real_env_eval, prev_archive=real_archive,
@@ -164,15 +168,6 @@ if __name__=='__main__':
             # Create a new Species indiv
             desc = np.add(data_in_to_add[-1,2:4], data_out_to_add[-1,:2])
 
-            if desc[0]>300:
-                data_in_to_add, data_out_to_add, last_obs = fpu.run_on_gym_env(fpu.real_env,
-                                                                 sorted_archive[i][1].x,
-                                                                               fpu.horizon,
-                                                                               display=True)
-                print("LAST OBS FOR THIS ONE:", last_obs)
-                print("PREVIOUSLY GIVEN ONE:", desc)
-                print("\n\n\n\n\n\n")
-            
             s = cm_map_elites.Species(sorted_archive[i][1].x, desc, sorted_archive[i][1].fitness)
             # Add to archive
             added = cvt_map_elites.__add_to_archive(s, s.desc, real_archive, kdt)
@@ -187,7 +182,9 @@ if __name__=='__main__':
             
                 tab_cpt += len(data_in_to_add)
 
-        cm_map_elites.__save_archive(real_archive, max_evals, itr)
+            real_env_evals += 1
+
+        cm_map_elites.__save_archive(real_archive, max_evals, itr, total_evals=real_env_evals)
         # filter out 0 lines that were left
         data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)] 
         data_out_no_0s = data_out[~np.all(data_in == 0, axis=1)]

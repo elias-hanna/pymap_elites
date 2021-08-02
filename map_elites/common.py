@@ -212,7 +212,7 @@ def parallel_eval(evaluate_function, to_evaluate, pool, params):
 
 # format: fitness, centroid, desc, genome \n
 # fitness, centroid, desc and x are vectors
-def __save_archive(archive, gen, iter_number):
+def __save_archive(archive, gen, iter_number, total_evals=None):
     def write_array(a, f):
         for i in a:
             f.write(str(i) + ' ')
@@ -224,3 +224,5 @@ def __save_archive(archive, gen, iter_number):
             write_array(k.desc, f)
             write_array(k.x, f)
             f.write("\n")
+        if total_evals:
+            f.write(total_evals, "\n")
