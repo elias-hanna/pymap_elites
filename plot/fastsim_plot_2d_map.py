@@ -140,9 +140,8 @@ def load_data(filename, dim,dim_x):
     fit = data[:-1, 0:1]
     desc = data[:-1,1: dim+1]
     x = data[:-1,dim+1:dim+1+dim_x]
-    total_evals = data[-1,:]
-    print(total_evals)
-    return fit, desc, x
+    total_evals = data[-1,0]
+    return fit, desc, x, total_evals
 
 def load_centroids(filename):
     points = np.loadtxt(filename)
@@ -186,7 +185,7 @@ if __name__ == "__main__":
 
     centroids = load_centroids(sys.argv[1])
     dim_x = 172
-    fit, beh, x = load_data(sys.argv[2], centroids.shape[1], dim_x)
+    fit, beh, x, total_evals = load_data(sys.argv[2], centroids.shape[1], dim_x)
     print("Fitness max : ", max(fit))
     index = np.argmax(fit)
     print("Average fit:", fit.sum() / fit.shape[0])
@@ -215,4 +214,5 @@ if __name__ == "__main__":
     plot_cvt(axes, centroids, fit, beh, x,2,4, min_fit, max_fit)
     # fig.savefig('cvt.pdf')
     filename = sys.argv[2][:-4] # remove .dat
+    plt.title("Evolution of the archive of behaviours on real environment\nTotal number of evaluations on real environment: " + str(total_evals))
     fig.savefig(filename + '_cvt.png')

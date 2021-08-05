@@ -163,7 +163,8 @@ def fastsim_eval(xx):
         bd[i] = trajs[-1,:2,i]
         ## Compute fitness (sum of mean range over ball pose [x,y])
         mean_range = np.mean(trajs_stddev[:,:,i], axis=0)
-        fitness[i] = -(mean_range[0] + mean_range[1])
+        # fitness[i] = -(mean_range[0] + mean_range[1]) # negative fitness will push evolution towwards "certain" individuals
+        fitness[i] = (mean_range[0] + mean_range[1]) # positive fitness will push evolution towwards "uncertain" individuals
 
     return fitness, bd
 

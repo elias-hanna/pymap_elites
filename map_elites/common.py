@@ -225,4 +225,6 @@ def __save_archive(archive, gen, iter_number, total_evals=None):
             write_array(k.x, f)
             f.write("\n")
         if total_evals:
-            f.write(total_evals, "\n")
+            total_len = 1 + len(k.centroid) + len(k.desc) + len(k.x) # 1 for len
+            write_array([total_evals for n in range(total_len)], f)
+            f.write("\n")

@@ -94,13 +94,13 @@ if __name__=='__main__':
     data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)] 
     data_out_no_0s = data_out[~np.all(data_in == 0, axis=1)]
 
-    max_iter = 10
+    max_iter = 100
     itr = 0
     convergence_thresh = 0.1
     has_converged = False # If uncertainty of less certain trajectory is below threshold ?
     surrogate_archive = {}
     real_archive = {}
-    while (itr < max_iter or not has_converged):
+    while (itr < max_iter and not has_converged):
 
         #1#
         # Normalize training data
@@ -133,7 +133,8 @@ if __name__=='__main__':
 
         print("Archive len: ", len(sorted_archive))
         
-        if (sorted_archive[0][1].fitness > -convergence_thresh):
+        # if (sorted_archive[0][1].fitness > -convergence_thresh): # When fitness is negative
+        if (sorted_archive[-1][1].fitness < convergence_thresh): # When fitness is positive
             print("Algorithm has converged")
             break
         
