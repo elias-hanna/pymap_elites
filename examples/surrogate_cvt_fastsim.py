@@ -30,8 +30,8 @@ if __name__=='__main__':
         "cvt_use_cache": True,
         "min": -5,
         "max": 5,
-        "bd_min": [0, 0],
-        "bd_max": [600, 600]
+        "bd_min": [-10, -10],
+        "bd_max": [10, 10]
     }
 
     dim_map = 2
@@ -42,7 +42,7 @@ if __name__=='__main__':
 
     real_env_evals = 0
     learned_env_evals = 0
-    
+
     # data containers
     data_in = np.zeros((fpu.horizon*fpu.init_random_trajs, fpu.input_dim))
     data_out = np.zeros((fpu.horizon*fpu.init_random_trajs, fpu.output_dim))
@@ -68,36 +68,72 @@ if __name__=='__main__':
         # -1)C) Selection and variation
     
 
-    #0#
-    
-    # Do init_random_trajs trajectories on real_env with random genotype and save the traj data for model learning
-    # input: genotype, horizon
-    # output: trajs
-    # Note: this type of init works for envs that are run with a unique action at beginning (not action trajs)
+    #-1#
+    # Do init_evals trajectories on empty_env with MAP-Elites algorithm and save the traj data for model learning.
+    init_evals = 50*fpu.eval_batch_size
+    surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.real_env_eval,
+                                               n_niches=n_niches, max_evals=init_evals,
+                                               params=params, all_pop_at_once=True)
+
+    cm_map_elites.__save_archive(surrogate_archive, max_evals, -1)
+
+    # data containers
+    data_in = np.zeros((fpu.horizon*len(surrogate_archive), fpu.input_dim))
+    data_out = np.zeros((fpu.horizon*len(surrogate_archive), fpu.output_dim))
+
+    #0 bis#
+    print("Archive len: ", len(surrogate_archive))
     tab_cpt = 0
-    for i in range(fpu.init_random_trajs):
+    for i, niche in zip(range(len(surrogate_archive)), surrogate_archive):
         # Create a random genotype
-        genotype = np.random.uniform(low=params["min"], high=params["max"], size=(fpu.n_weights,))
+        genotype = surrogate_archive[niche].x
 
         data_in_to_add, data_out_to_add, last_obs = fpu.run_on_gym_env(fpu.real_env,
-                                                             genotype,
-                                                             fpu.horizon)
+                                                                       genotype,
+                                                                       fpu.horizon
+        )
 
         data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
         data_out[tab_cpt:tab_cpt+len(data_out_to_add),:] = data_out_to_add
                
-        print("{:.1f}".format(i/fpu.init_random_trajs*100),"% done", end="\r")
+        print("{:.1f}".format(i/len(surrogate_archive)*100),"% done", end="\r")
         tab_cpt += len(data_in_to_add)
         real_env_evals += 1
 
     # filter out 0 lines that were left
     data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)] 
     data_out_no_0s = data_out[~np.all(data_in == 0, axis=1)]
+    
+    #0#
+    # Do init_random_trajs trajectories on real_env with random genotype and save the traj data for model learning
+    # input: genotype, horizon
+    # output: trajs
+    # Note: this type of init works for envs that are run with a unique action at beginning (not action trajs)
+    # tab_cpt = 0
+    # for i in range(fpu.init_random_trajs):
+    #     # Create a random genotype
+    #     genotype = np.random.uniform(low=params["min"], high=params["max"], size=(fpu.n_weights,))
+
+    #     data_in_to_add, data_out_to_add, last_obs = fpu.run_on_gym_env(fpu.real_env,
+    #                                                                    genotype,
+    #                                                                    fpu.horizon
+    #     )
+
+    #     data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
+    #     data_out[tab_cpt:tab_cpt+len(data_out_to_add),:] = data_out_to_add
+               
+    #     print("{:.1f}".format(i/fpu.init_random_trajs*100),"% done", end="\r")
+    #     tab_cpt += len(data_in_to_add)
+    #     real_env_evals += 1
+
+    # # filter out 0 lines that were left
+    # data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)] 
+    # data_out_no_0s = data_out[~np.all(data_in == 0, axis=1)]
 
     max_iter = 100
     itr = 0
     convergence_thresh = 0.1
-    has_converged = False # If uncertainty of less certain trajectory is below threshold ?
+    has_converged = False # While uncertainty of less certain trajectory is below threshold ?
     surrogate_archive = {}
     real_archive = {}
     while (itr < max_iter and not has_converged):
@@ -119,12 +155,16 @@ if __name__=='__main__':
 
         # Perform CVT map elites computation on learned model
         # archive is made of a collection of species
-        surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.fastsim_eval, prev_archive=real_archive.copy(),
-                                         n_niches=n_niches, max_evals=max_evals, params=params,
-                                         all_pop_at_once=True, iter_number=itr)
-        # surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.real_env_eval, prev_archive=real_archive,
-        #                                  n_niches=n_niches, max_evals=max_evlas, params=params,
-        #                                  all_pop_at_once=True, iter_number=itr) # to test cvt alg
+        surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.fastsim_eval,
+                                                   prev_archive=real_archive.copy(),
+                                                   n_niches=n_niches, max_evals=max_evals,
+                                                   params=params, all_pop_at_once=True,
+                                                   iter_number=itr)
+        # surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.real_env_eval,
+                                                   # prev_archive=real_archive.copy(),
+                                                   # n_niches=n_niches, max_evals=max_evals,
+                                                   # params=params, all_pop_at_once=True,
+                                                   # iter_number=itr) # to test cvt alg
 
         #3#
         # Get the N most uncertain individuals and test them on real setup to gather data
@@ -133,9 +173,10 @@ if __name__=='__main__':
 
         print("Archive len: ", len(sorted_archive))
         
-        # if (sorted_archive[0][1].fitness > -convergence_thresh): # When fitness is negative
-        if (sorted_archive[-1][1].fitness < convergence_thresh): # When fitness is positive
+        if (sorted_archive[0][1].fitness > -convergence_thresh): # When fitness is negative
+        # if (sorted_archive[-1][1].fitness < convergence_thresh): # When fitness is positive
             print("Algorithm has converged")
+            print(sorted_archive)
             break
         
         #4#

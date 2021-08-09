@@ -58,7 +58,7 @@ n_weights = SimpleNeuralController(controller_input_dim, controller_output_dim, 
 eval_batch_size = 100
 
 # env run params
-init_random_trajs = 10
+init_random_trajs = 20
 
 max_vel = 4
 
@@ -66,7 +66,7 @@ max_vel = 4
 init_angle = np.pi/4
 angular_state = np.array([np.sin(init_angle), np.cos(init_angle)])
 init_state = np.concatenate((np.array([60., 450.]), angular_state))
-horizon = 2000 # time steps on env (real and learned one)
+horizon = 200 # time steps on env (real and learned one)
 
 #### Standard normalization ####
 def normalize_data(data_in, data_out):
@@ -159,12 +159,17 @@ def fastsim_eval(xx):
     bd = [[0.,0.]]*len(xx)
     ## iterate over all individuals
     for i in range(len(xx)):
-        ## Compute BD (last ball position of closest observed trajectory to mean trajectory
-        bd[i] = trajs[-1,:2,i]
+        ## Compute BD (displacement during trajectory)
+        bd[i] = trajs[-1,:2,i] - trajs[0,:2,i]
+        for rr in range(len(trajs[:,:,i])):
+          print(trajs[rr, :, i])
+        print("first:", trajs[0,:2,i])
+        print("last:", trajs[-1,:2,i])
         ## Compute fitness (sum of mean range over ball pose [x,y])
         mean_range = np.mean(trajs_stddev[:,:,i], axis=0)
-        # fitness[i] = -(mean_range[0] + mean_range[1]) # negative fitness will push evolution towwards "certain" individuals
-        fitness[i] = (mean_range[0] + mean_range[1]) # positive fitness will push evolution towwards "uncertain" individuals
+        fitness[i] = -(mean_range[0] + mean_range[1]) # negative fitness will push evolution towwards "certain" individuals
+        # fitness[i] = (mean_range[0] + mean_range[1]) # positive fitness will push evolution towwards "uncertain" individuals
+        fitness[i] = -1 # test
 
     return fitness, bd
 
@@ -181,7 +186,7 @@ def real_env_eval(xx):
     for i in range(len(xx)):
         trajs[0,:, i] = init_state
     
-        data_in, data_out = run_on_gym_env(real_env, xx[i], horizon)
+        data_in, data_out, last_obs = run_on_gym_env(real_env, xx[i], horizon)
 
         trajs[:-1,:,i] = data_in[:,2:]
         trajs[-1,:,i] = data_out[-1,:] + data_in[-1,2:]
@@ -193,9 +198,11 @@ def real_env_eval(xx):
         loc_traj = trajs[:,:,i]
         tmp_loc_traj = loc_traj[~np.all(loc_traj == 0, axis=1)]
         
-        ## Compute BD (last ball position of closest observed trajectory to mean trajectory
-        bd[i] = tmp_loc_traj[-1,:2]
-        ## Compute fitness (sum of mean range over ball pose [x,y])
+        ## Compute BD (displacement during trajectory)
+        bd[i] = tmp_loc_traj[-1,:2] - tmp_loc_traj[0, :2]
+        # print("loc first:", tmp_loc_traj[0,:2])
+        # print("loc last:", tmp_loc_traj[-1,:2])
+        ## Compute fitness
         fitness[i] = np.random.rand()
 
     return fitness, bd

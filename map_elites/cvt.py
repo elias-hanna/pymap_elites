@@ -158,5 +158,6 @@ def compute(dim_map, dim_x, f, prev_archive={},
                     fit_list.max(), np.mean(fit_list), np.median(fit_list),
                     np.percentile(fit_list, 5), np.percentile(fit_list, 95)))
             log_file.flush()
-    cm.__save_archive(archive, n_evals, iter_number)
+    if params['dump_period'] != -1:
+        cm.__save_archive(archive, n_evals, iter_number)
     return archive
