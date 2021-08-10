@@ -203,7 +203,8 @@ def real_env_eval(xx):
         # print("loc first:", tmp_loc_traj[0,:2])
         # print("loc last:", tmp_loc_traj[-1,:2])
         ## Compute fitness
-        fitness[i] = np.random.rand()
+        # fitness[i] = np.random.rand()
+        fitness[i] = -1
 
     return fitness, bd
 
