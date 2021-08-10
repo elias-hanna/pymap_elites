@@ -181,7 +181,7 @@ def real_env_eval(xx):
     for i in range(len(xx)):
         trajs[0,:, i] = init_state
     
-        data_in, data_out = run_on_gym_env(real_env, xx[i], horizon)
+        data_in, data_out, last_obs = run_on_gym_env(real_env, xx[i], horizon)
 
         trajs[:-1,:,i] = data_in[:,2:]
         trajs[-1,:,i] = data_out[-1,:] + data_in[-1,2:]
