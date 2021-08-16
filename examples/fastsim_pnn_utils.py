@@ -36,7 +36,9 @@ stds_in = None
 means_out = None
 stds_out = None
 
-num_epochs = 10 # number of epochs when learning on gathered data
+test_itr = 0
+
+num_epochs = 50 # number of epochs when learning on gathered data
 
 hidden_units = [500,500,500]
 batch_size = 256
@@ -46,10 +48,11 @@ input_dim = real_env.action_space.shape[0] + real_env.observation_space.shape[0]
 output_dim = real_env.observation_space.shape[0] + 1 # +1 to make up for the angular state that is divided in two
 
 pnn = ProbabilisticNeuralNetwork(input_dim=input_dim, output_dim=output_dim, train_prop=train_prop,
-                                 batch_size=batch_size, learning_rate=learning_rate, hidden_units=hidden_units)
+                                 batch_size=batch_size, learning_rate=learning_rate,
+                                 hidden_units=hidden_units)
 
 # Robot controller params
-controller_input_dim = real_env.observation_space.shape[0]
+controller_input_dim = 1 # only raw time given #real_env.observation_space.shape[0]
 controller_output_dim = real_env.action_space.shape[0]
 controller_nnparams={"n_hidden_layers": 2, "n_neurons_per_hidden": 10} # same params as ran NS experiment 
 n_weights = SimpleNeuralController(controller_input_dim, controller_output_dim, params=controller_nnparams).n_weights
@@ -58,7 +61,7 @@ n_weights = SimpleNeuralController(controller_input_dim, controller_output_dim, 
 eval_batch_size = 100
 
 # env run params
-init_random_trajs = 20
+init_random_trajs = 10
 
 max_vel = 4
 
@@ -66,7 +69,7 @@ max_vel = 4
 init_angle = np.pi/4
 angular_state = np.array([np.sin(init_angle), np.cos(init_angle)])
 init_state = np.concatenate((np.array([60., 450.]), angular_state))
-horizon = 200 # time steps on env (real and learned one)
+horizon = 20 # time steps on env (real and learned one)
 
 #### Standard normalization ####
 def normalize_data(data_in, data_out):
@@ -134,6 +137,9 @@ def fastsim_eval(xx):
             to_input_controller = np.concatenate((prev_step[:2], 
                                                   [np.arctan2(prev_step[2], prev_step[3])]))
             to_input_controller = normalize_controller_input(to_input_controller)
+
+            # using time as input
+            to_input_controller = np.array([t])
             action = controllers[i](to_input_controller) # compute next action
             action[action>max_vel] = max_vel
             action[action<-max_vel] = -max_vel
@@ -148,11 +154,11 @@ def fastsim_eval(xx):
         output_stdv = output_distribution.stddev().numpy()
         trajs_stddev[t+1,:,:] = np.transpose(output_stdv[:,:])
         for i in range(len(xx)): # rescale the transition model output
-            trajs[t+1,:,i] = rescale_standard(trajs_stddev[t+1,:,i], means_out, stds_out)
+            trajs_stddev[t+1,:,i] = rescale_standard(trajs_stddev[t+1,:,i], means_out, stds_out)
             trajs[t+1,:,i] = rescale_standard(trajs[t+1,:,i], means_out, stds_out)
             trajs[t+1,:,i] += trajs[t,:,i] # add previous state as we predict st+1 - st
     te2 = datetime.datetime.now()
-    print("Time for sequential: ", te2-ts2)
+    # print("Time for sequential: ", te2-ts2)
     
     ## Compute fitness and bd for each indivs
     fitness = [0.]*len(xx)
@@ -161,16 +167,18 @@ def fastsim_eval(xx):
     for i in range(len(xx)):
         ## Compute BD (displacement during trajectory)
         bd[i] = trajs[-1,:2,i] - trajs[0,:2,i]
-        for rr in range(len(trajs[:,:,i])):
-          print(trajs[rr, :, i])
-        print("first:", trajs[0,:2,i])
-        print("last:", trajs[-1,:2,i])
         ## Compute fitness (sum of mean range over ball pose [x,y])
         mean_range = np.mean(trajs_stddev[:,:,i], axis=0)
         fitness[i] = -(mean_range[0] + mean_range[1]) # negative fitness will push evolution towwards "certain" individuals
         # fitness[i] = (mean_range[0] + mean_range[1]) # positive fitness will push evolution towwards "uncertain" individuals
         fitness[i] = -1 # test
 
+    global test_itr
+    # np.save("trajs_"+str(test_itr), trajs)
+    # np.save("xx_"+str(test_itr), xx) 
+    # pnn.model.save_weights("weights_"+str(test_itr))
+
+    test_itr += 1
     return fitness, bd
 
 # takes genotype of all population (controller parameters)
@@ -182,7 +190,7 @@ def real_env_eval(xx):
 
     # M = 10 # number of iterations on model
     
-    trajs = np.zeros((horizon, output_dim, len(xx)))
+    trajs = np.zeros((horizon-1, output_dim, len(xx)))
     for i in range(len(xx)):
         trajs[0,:, i] = init_state
     
@@ -208,8 +216,35 @@ def real_env_eval(xx):
 
     return fitness, bd
 
+# takes genotype of all population (controller parameters)
+# returns list of fitness , behavior descriptor for each individual
+def simplified_env_eval(xx):
+    
+    trajs = np.zeros((horizon-1, output_dim, len(xx)))
+    for i in range(len(xx)):
+        trajs[0,:, i] = init_state
+    
+        data_in, data_out, last_obs = run_on_gym_env(simplified_env, xx[i], horizon)
+
+        trajs[:-1,:,i] = data_in[:,2:]
+        trajs[-1,:,i] = data_out[-1,:] + data_in[-1,2:]
+    ## Compute fitness and bd for each indivs
+    fitness = [0.]*len(xx)
+    bd = [[0.,0.]]*len(xx)
+    ## iterate over all individuals
+    for i in range(len(xx)):
+        loc_traj = trajs[:,:,i]
+        tmp_loc_traj = loc_traj[~np.all(loc_traj == 0, axis=1)]
+        
+        ## Compute BD (displacement during trajectory)
+        bd[i] = tmp_loc_traj[-1,:2] - tmp_loc_traj[0, :2]
+        ## Compute fitness
+        fitness[i] = -1
+
+    return fitness, bd
+  
 # genotype shape for FastsimSimpleNavigationPos env: (number of weights of nn controller,)
-def run_on_gym_env(env, genotype, horizon, display=False):
+def run_on_gym_env(env, genotype, horizon, display=False, test_model=False):
     # Initialize data containers that will retain whole trajectory
     data_in = np.zeros((horizon, input_dim))
     data_out = np.zeros((horizon, output_dim))
@@ -227,23 +262,47 @@ def run_on_gym_env(env, genotype, horizon, display=False):
 
     controller_nn.set_parameters(genotype) # set the controller with the individual weights
 
+    if test_model:
+      trajs = np.zeros((horizon, output_dim, 1))
+      trajs[0,:,0] = init_state
+
     tab_cpt = 0
     # T time steps, but "done" can be attained before T is reached
-    for t in range(horizon):
+    for t in range(horizon-1):
         if(display):
             env.render()
 
         # action = controller_nn(obs) # compute next action
-        action = controller_nn(normalize_controller_input(obs)) # compute next action
-
+        # action = controller_nn(normalize_controller_input(obs)) # compute next action
+        #using time
+        action = controller_nn(np.array([t]))
         action[action>max_vel] = max_vel
         action[action<-max_vel] = -max_vel
 
         prev_action = action
         prev_obs = obs
-    
+
+        if test_model:
+          print("real: ", obs ," - predicted: ", trajs[t,:,0])
+
+        
         obs, reward, done, info = env.step(action)
 
+        if test_model:
+          to_input = np.zeros((1, input_dim))
+          # Create input vector to give to transition model PNN
+          to_input[0,:2] = action
+          to_input[0,2:] = np.transpose(trajs[t,:,0])
+          to_input[0,:] = normalize_standard(to_input[0,:], means_in, stds_in) 
+          # Predict using model
+          output_distribution = pnn.model(to_input)
+          output_mean = output_distribution.mean().numpy()
+          trajs[t+1,:,0:1] = np.transpose(output_mean)
+          trajs[t+1,:,0] = rescale_standard(trajs[t+1,:,0], means_out, stds_out)
+          trajs[t+1,:,0] += trajs[t,:,0] # add previous state as we predict st+1 - st
+          
+          output_stdv = output_distribution.stddev().numpy()
+          # print(rescale_standard(output_stdv, means_out, stds_out))
         if(t==0):
             continue
         
@@ -260,7 +319,8 @@ def run_on_gym_env(env, genotype, horizon, display=False):
             break
     
         if(display):
-            time.sleep(0.001)
+            # time.sleep(0.001)
+            time.sleep(0.1)
 
     # format data
     data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)]

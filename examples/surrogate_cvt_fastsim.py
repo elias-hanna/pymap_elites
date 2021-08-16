@@ -37,7 +37,7 @@ if __name__=='__main__':
     dim_map = 2
     dim_gen = fpu.n_weights
     n_niches = 1000
-    n_gen = 20
+    n_gen = 50
     max_evals = n_gen*fpu.eval_batch_size
 
     real_env_evals = 0
@@ -71,17 +71,21 @@ if __name__=='__main__':
     #-1#
     # Do init_evals trajectories on empty_env with MAP-Elites algorithm and save the traj data for model learning.
     init_evals = 50*fpu.eval_batch_size
-    surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.real_env_eval,
-                                               n_niches=n_niches, max_evals=init_evals,
-                                               params=params, all_pop_at_once=True)
+    # surrogate_archive, n_evals = cvt_map_elites.compute(dim_map, dim_gen, fpu.real_env_eval,
+    surrogate_archive, n_evals = cvt_map_elites.compute(dim_map, dim_gen, fpu.simplified_env_eval,
+                                                        n_niches=n_niches, max_evals=init_evals,
+                                                        params=params, all_pop_at_once=True,
+                                                        iter_number=-1)
+    # learned_env_evals += n_evals
+    # real_env_evals += n_evals
 
-    cm_map_elites.__save_archive(surrogate_archive, max_evals, -1)
+    cm_map_elites.__save_archive(surrogate_archive, max_evals, -1, total_evals=0)
 
     # data containers
     data_in = np.zeros((fpu.horizon*len(surrogate_archive), fpu.input_dim))
     data_out = np.zeros((fpu.horizon*len(surrogate_archive), fpu.output_dim))
 
-    #0 bis#
+    # 0 bis#
     print("Archive len: ", len(surrogate_archive))
     tab_cpt = 0
     for i, niche in zip(range(len(surrogate_archive)), surrogate_archive):
@@ -155,16 +159,12 @@ if __name__=='__main__':
 
         # Perform CVT map elites computation on learned model
         # archive is made of a collection of species
-        surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.fastsim_eval,
-                                                   prev_archive=real_archive.copy(),
-                                                   n_niches=n_niches, max_evals=max_evals,
-                                                   params=params, all_pop_at_once=True,
-                                                   iter_number=itr)
-        # surrogate_archive = cvt_map_elites.compute(dim_map, dim_gen, fpu.real_env_eval,
-                                                   # prev_archive=real_archive.copy(),
-                                                   # n_niches=n_niches, max_evals=max_evals,
-                                                   # params=params, all_pop_at_once=True,
-                                                   # iter_number=itr) # to test cvt alg
+        surrogate_archive, n_evals = cvt_map_elites.compute(dim_map, dim_gen, fpu.fastsim_eval,
+                                                            prev_archive=real_archive.copy(),
+                                                            n_niches=n_niches, max_evals=max_evals,
+                                                            params=params, all_pop_at_once=True,
+                                                            iter_number=itr)
+        learned_env_evals += n_evals
 
         #3#
         # Get the N most uncertain individuals and test them on real setup to gather data
@@ -200,15 +200,17 @@ if __name__=='__main__':
         # create the cvt
         c = cm_map_elites.cvt(n_niches, dim_map, params)
         kdt = KDTree(c, leaf_size=30, metric='euclidean')
-
         for i in range(min(N, len(sorted_archive))):
             ind = sorted_archive[i][1] # (centroid, Species) tuple
             data_in_to_add, data_out_to_add, last_obs = fpu.run_on_gym_env(fpu.real_env,
-                                                                 sorted_archive[i][1].x,
-                                                                 fpu.horizon)
+                                                                           sorted_archive[i][1].x,
+                                                                           fpu.horizon,
+                                                                           display=False,
+                                                                           test_model=False)
         
             # Create a new Species indiv
-            desc = np.add(data_in_to_add[-1,2:4], data_out_to_add[-1,:2])
+            desc = np.subtract(np.add(data_in_to_add[-1,2:4], data_out_to_add[-1,:2]),
+                               data_in_to_add[0,2:4])
 
             s = cm_map_elites.Species(sorted_archive[i][1].x, desc, sorted_archive[i][1].fitness)
             # Add to archive
@@ -217,7 +219,6 @@ if __name__=='__main__':
 
             # added = 1 if individual was added to archive, 0 otherwise
             # Only add the data if its new
-            print(desc, " - ", last_obs)
             if(added):
                 data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
                 data_out[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_out_to_add
@@ -225,7 +226,7 @@ if __name__=='__main__':
                 tab_cpt += len(data_in_to_add)
 
             real_env_evals += 1
-
+            
         cm_map_elites.__save_archive(real_archive, max_evals, itr, total_evals=real_env_evals)
         # filter out 0 lines that were left
         data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)] 

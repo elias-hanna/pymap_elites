@@ -160,4 +160,4 @@ def compute(dim_map, dim_x, f, prev_archive={},
             log_file.flush()
     if params['dump_period'] != -1:
         cm.__save_archive(archive, n_evals, iter_number)
-    return archive
+    return archive, n_evals
