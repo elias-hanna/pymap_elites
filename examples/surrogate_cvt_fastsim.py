@@ -30,11 +30,11 @@ if __name__=='__main__':
         "cvt_use_cache": True,
         "min": -5,
         "max": 5,
-        "bd_min": [-10, -10],
-        "bd_max": [10, 10]
+        "bd_min": [-10, -10, -np.pi],
+        "bd_max": [10, 10, np.pi]
     }
 
-    dim_map = 2
+    dim_map = 3
     dim_gen = fpu.n_weights
     n_niches = 1000
     n_gen = 50
@@ -72,6 +72,11 @@ if __name__=='__main__':
     # Do init_evals trajectories on empty_env with MAP-Elites algorithm and save the traj data for model learning.
     init_evals = 50*fpu.eval_batch_size
     # surrogate_archive, n_evals = cvt_map_elites.compute(dim_map, dim_gen, fpu.real_env_eval,
+    print(cvt_map_elites.compute(dim_map, dim_gen, fpu.simplified_env_eval,
+                                 n_niches=n_niches, max_evals=init_evals,
+                                 params=params, all_pop_at_once=True,
+                                 iter_number=-1))
+
     surrogate_archive, n_evals = cvt_map_elites.compute(dim_map, dim_gen, fpu.simplified_env_eval,
                                                         n_niches=n_niches, max_evals=init_evals,
                                                         params=params, all_pop_at_once=True,
@@ -209,9 +214,15 @@ if __name__=='__main__':
                                                                            test_model=False)
         
             # Create a new Species indiv
-            desc = np.subtract(np.add(data_in_to_add[-1,2:4], data_out_to_add[-1,:2]),
-                               data_in_to_add[0,2:4])
-
+            first_state = np.concatenate((data_in_to_add[0,2:4], # position
+                                          np.array([np.arctan2(data_in_to_add[0,4],
+                                                               data_in_to_add[0,5])])))
+            last_data = np.add(data_in_to_add[-1,2:], data_out_to_add[-1,:])
+            last_state = np.concatenate((last_data[:2], # position
+                                          np.array([np.arctan2(last_data[2],
+                                                               last_data[3])])))
+            
+            desc = last_state - first_state
             s = cm_map_elites.Species(sorted_archive[i][1].x, desc, sorted_archive[i][1].fitness)
             # Add to archive
             added = cvt_map_elites.__add_to_archive(s, s.desc, real_archive, kdt)
@@ -236,3 +247,32 @@ if __name__=='__main__':
         itr += 1
 
     print("Finished learning.")
+
+    # Once skill repertoire is learnt
+
+    # Plan using MCTS to attain final goal
+
+    # Problem -> need to refine model on real system before
+    
+    # real_env = 0 # env on which real robot is moving
+    # learned_env = 1 # env wrapping the learnt model + archive of behaviours
+    # learned_env.reset(pnn_model, archive)
+    # obs = real_env.reset()
+    # model = DPW(alpha=0.3, beta=0.2, initial_obs=obs, env=learned_env, K=3**0.5)
+    # done = False
+    
+    # N = 10000
+    # H = 20
+    # while not done: # until completion of real_env
+    #     model.learn(N, progress_bar=True)
+    #     genome = model.best_action() # /!\ action must be a behaviour from the archive (genome?)
+    #     controller = new_controller(genome)
+    #     for i in range(H):
+    #         action = controller(obs)
+    #         action[action>max_vel] = max_vel
+    #         action[action<-max_vel] = -max_vel
+    #         obs, r, done, info = real_env.step(action)
+    #     model.forward(genome, obs)
+    #     if done:
+    #         break
+    # env.close()

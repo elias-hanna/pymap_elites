@@ -162,16 +162,18 @@ def fastsim_eval(xx):
     
     ## Compute fitness and bd for each indivs
     fitness = [0.]*len(xx)
-    bd = [[0.,0.]]*len(xx)
+    bd = [[0., 0., 0.]]*len(xx)
     ## iterate over all individuals
     for i in range(len(xx)):
         ## Compute BD (displacement during trajectory)
-        bd[i] = trajs[-1,:2,i] - trajs[0,:2,i]
+        angular_diff = np.arctan2(trajs[-1,2,i], trajs[-1,3,i]) - \
+                       np.arctan2(trajs[0,2,i], trajs[0,3,i])
+        pos_diff = trajs[-1,:2,i] - trajs[0,:2,i]
+        bd[i] = np.concatenate((pos_diff, np.array([angular_diff])))
         ## Compute fitness (sum of mean range over ball pose [x,y])
         mean_range = np.mean(trajs_stddev[:,:,i], axis=0)
         fitness[i] = -(mean_range[0] + mean_range[1]) # negative fitness will push evolution towwards "certain" individuals
         # fitness[i] = (mean_range[0] + mean_range[1]) # positive fitness will push evolution towwards "uncertain" individuals
-        fitness[i] = -1 # test
 
     global test_itr
     # np.save("trajs_"+str(test_itr), trajs)
@@ -200,16 +202,17 @@ def real_env_eval(xx):
         trajs[-1,:,i] = data_out[-1,:] + data_in[-1,2:]
     ## Compute fitness and bd for each indivs
     fitness = [0.]*len(xx)
-    bd = [[0.,0.]]*len(xx)
+    bd = [[0.,0., 0.]]*len(xx)
     ## iterate over all individuals
     for i in range(len(xx)):
         loc_traj = trajs[:,:,i]
         tmp_loc_traj = loc_traj[~np.all(loc_traj == 0, axis=1)]
         
         ## Compute BD (displacement during trajectory)
-        bd[i] = tmp_loc_traj[-1,:2] - tmp_loc_traj[0, :2]
-        # print("loc first:", tmp_loc_traj[0,:2])
-        # print("loc last:", tmp_loc_traj[-1,:2])
+        angular_diff = np.arctan2(tmp_loc_traj[-1,2], tmp_loc_traj[-1,3]) - \
+                       np.arctan2(tmp_loc_traj[0,2], tmp_loc_traj[0,3])
+        pos_diff = tmp_loc_traj[-1,:2] - tmp_loc_traj[0,:2]
+        bd[i] = np.concatenate((pos_diff, np.array([angular_diff])))
         ## Compute fitness
         # fitness[i] = np.random.rand()
         fitness[i] = -1
@@ -230,14 +233,18 @@ def simplified_env_eval(xx):
         trajs[-1,:,i] = data_out[-1,:] + data_in[-1,2:]
     ## Compute fitness and bd for each indivs
     fitness = [0.]*len(xx)
-    bd = [[0.,0.]]*len(xx)
+    bd = [[0.,0., 0.]]*len(xx)
     ## iterate over all individuals
     for i in range(len(xx)):
         loc_traj = trajs[:,:,i]
         tmp_loc_traj = loc_traj[~np.all(loc_traj == 0, axis=1)]
-        
+
         ## Compute BD (displacement during trajectory)
-        bd[i] = tmp_loc_traj[-1,:2] - tmp_loc_traj[0, :2]
+        angular_diff = np.arctan2(tmp_loc_traj[-1,2], tmp_loc_traj[-1,3]) - \
+                       np.arctan2(tmp_loc_traj[0,2], tmp_loc_traj[0,3])
+        pos_diff = tmp_loc_traj[-1,:2] - tmp_loc_traj[0,:2]
+        bd[i] = np.concatenate((pos_diff, np.array([angular_diff])))
+        
         ## Compute fitness
         fitness[i] = -1
 
