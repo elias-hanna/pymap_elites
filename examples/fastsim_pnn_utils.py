@@ -251,13 +251,14 @@ def simplified_env_eval(xx):
     return fitness, bd
   
 # genotype shape for FastsimSimpleNavigationPos env: (number of weights of nn controller,)
-def run_on_gym_env(env, genotype, horizon, display=False, test_model=False):
+def run_on_gym_env(env, genotype, horizon, display=False, test_model=False, reset_env=True):
     # Initialize data containers that will retain whole trajectory
     data_in = np.zeros((horizon, input_dim))
     data_out = np.zeros((horizon, output_dim))
     to_input_controller = np.zeros((1, controller_input_dim))
 
-    obs = env.reset()
+    if reset_env:
+      obs = env.reset()
 
     if(display):
         env.enable_display()

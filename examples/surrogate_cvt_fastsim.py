@@ -10,6 +10,12 @@ from sklearn.neighbors import KDTree
 import fastsim_pnn_utils as fpu
 import numpy as np
 
+# Env imports
+import gym
+import gym_learned_model
+
+# MCTS imports
+from mcts.DPW import DPW
 
 if __name__=='__main__':
     ### run params ###
@@ -72,11 +78,6 @@ if __name__=='__main__':
     # Do init_evals trajectories on empty_env with MAP-Elites algorithm and save the traj data for model learning.
     init_evals = 50*fpu.eval_batch_size
     # surrogate_archive, n_evals = cvt_map_elites.compute(dim_map, dim_gen, fpu.real_env_eval,
-    print(cvt_map_elites.compute(dim_map, dim_gen, fpu.simplified_env_eval,
-                                 n_niches=n_niches, max_evals=init_evals,
-                                 params=params, all_pop_at_once=True,
-                                 iter_number=-1))
-
     surrogate_archive, n_evals = cvt_map_elites.compute(dim_map, dim_gen, fpu.simplified_env_eval,
                                                         n_niches=n_niches, max_evals=init_evals,
                                                         params=params, all_pop_at_once=True,
@@ -139,7 +140,7 @@ if __name__=='__main__':
     # data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)] 
     # data_out_no_0s = data_out[~np.all(data_in == 0, axis=1)]
 
-    max_iter = 100
+    max_iter = 2
     itr = 0
     convergence_thresh = 0.1
     has_converged = False # While uncertainty of less certain trajectory is below threshold ?
@@ -181,7 +182,6 @@ if __name__=='__main__':
         if (sorted_archive[0][1].fitness > -convergence_thresh): # When fitness is negative
         # if (sorted_archive[-1][1].fitness < convergence_thresh): # When fitness is positive
             print("Algorithm has converged")
-            print(sorted_archive)
             break
         
         #4#
@@ -253,26 +253,85 @@ if __name__=='__main__':
     # Plan using MCTS to attain final goal
 
     # Problem -> need to refine model on real system before
+
+    learned_env_params = \
+    {
+        "hidden_units": fpu.hidden_units,
+        "input_dim": fpu.input_dim, # needs to be defined
+        "output_dim": fpu.output_dim,  # needs to be defined
+        "controller_input_dim": fpu.controller_input_dim,
+        "controller_output_dim": fpu.controller_output_dim,
+        "controller_nn_params": fpu.controller_nnparams,
+        "action_min": [-4, -4],
+        "action_max": [4, 4],
+        "observation_min": [0, 0, -np.pi],
+        "observation_max": [600, 600, np.pi],
+        "horizon": fpu.horizon, # time steps
+        "init_state": [60., 450.],
+        "goal_state": [60., 60.]
+    }
     
-    # real_env = 0 # env on which real robot is moving
-    # learned_env = 1 # env wrapping the learnt model + archive of behaviours
-    # learned_env.reset(pnn_model, archive)
-    # obs = real_env.reset()
-    # model = DPW(alpha=0.3, beta=0.2, initial_obs=obs, env=learned_env, K=3**0.5)
-    # done = False
+    # fpu.real_env = 0 # env on which real robot is moving
+    # env wrapping the learnt model + archive of behaviours
+    learned_env = gym.make('PnnEnv-v0',
+                           model_weights=fpu.pnn.model.get_weights(),
+                           archive=real_archive,
+                           params=learned_env_params)
     
-    # N = 10000
-    # H = 20
-    # while not done: # until completion of real_env
-    #     model.learn(N, progress_bar=True)
-    #     genome = model.best_action() # /!\ action must be a behaviour from the archive (genome?)
-    #     controller = new_controller(genome)
-    #     for i in range(H):
-    #         action = controller(obs)
-    #         action[action>max_vel] = max_vel
-    #         action[action<-max_vel] = -max_vel
-    #         obs, r, done, info = real_env.step(action)
-    #     model.forward(genome, obs)
-    #     if done:
-    #         break
-    # env.close()
+    obs = fpu.real_env.reset()
+    model = DPW(alpha=0.3, beta=0.2, initial_obs=obs, env=learned_env, K=3**0.5)
+    done = False
+    
+    N = 10000
+    H = 20
+    while not done: # until completion of real_env
+
+        ### Reset data containers ###
+        # reset data containers while maintaining previous data
+        tmp_data_in = np.zeros((len(data_in_no_0s)+fpu.horizon, fpu.input_dim))
+        tmp_data_out = np.zeros((len(data_out_no_0s)+fpu.horizon, fpu.output_dim))
+
+        tmp_data_in[:tab_cpt,:] = data_in_no_0s
+        tmp_data_out[:tab_cpt,:] = data_out_no_0s
+        data_in = tmp_data_in
+        data_out = tmp_data_out
+
+        ### Expand the tree and get best action ###
+        model.learn(N, progress_bar=True)
+        bh_index = model.best_action() # /!\ Outputs index of a behaviour in archive
+
+        ### Run selected action on real_env for horizon timesteps ###
+        data_in_to_add, data_out_to_add, last_obs = fpu.run_on_gym_env(fpu.real_env,
+                                                                       real_archive[bh_index].x,
+                                                                       fpu.horizon,
+                                                                       reset_env=False,
+                                                                       display=True
+        )
+
+        ### Train the model using the foraged data ###
+        # Refine our model
+        data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
+        data_out[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_out_to_add
+
+        # filter out 0 lines that were left
+        data_in_no_0s = data_in[~np.all(data_in == 0, axis=1)] 
+        data_out_no_0s = data_out[~np.all(data_in == 0, axis=1)]
+
+        # Normalize training data
+        normalized_data_in, normalized_data_out = fpu.normalize_data(data_in_no_0s, data_out_no_0s)
+        
+        # Learn a model from the gathered data
+        train_dataset, test_dataset = fpu.pnn.get_train_and_test_splits(normalized_data_in, normalized_data_out)
+
+        fpu.pnn.create_model()
+        fpu.pnn.run_experiment(train_dataset, test_dataset, fpu.num_epochs)
+
+        tab_cpt += len(data_in_to_add)
+
+        real_env_evals += 1
+
+        ### Advance the tree to the action taken ###
+        model.forward(bh_index, last_obs)
+        
+        if done:
+            break
