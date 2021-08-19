@@ -253,6 +253,7 @@ if __name__=='__main__':
     # Plan using MCTS to attain final goal
 
     # Problem -> need to refine model on real system before
+    obs = fpu.real_env.reset()
 
     learned_env_params = \
     {
@@ -267,7 +268,7 @@ if __name__=='__main__':
         "observation_min": [0, 0, -np.pi],
         "observation_max": [600, 600, np.pi],
         "horizon": fpu.horizon, # time steps
-        "init_state": [60., 450.],
+        "init_state": obs,
         "goal_state": [60., 60.]
     }
     
@@ -278,7 +279,6 @@ if __name__=='__main__':
                            archive=real_archive,
                            params=learned_env_params)
     
-    obs = fpu.real_env.reset()
     model = DPW(alpha=0.3, beta=0.2, initial_obs=obs, env=learned_env, K=3**0.5)
     done = False
     
@@ -302,12 +302,12 @@ if __name__=='__main__':
 
         ### Run selected action on real_env for horizon timesteps ###
         data_in_to_add, data_out_to_add, last_obs = fpu.run_on_gym_env(fpu.real_env,
-                                                                       real_archive[bh_index].x,
+                                                                       learned_env.archive[bh_index].x,
                                                                        fpu.horizon,
                                                                        reset_env=False,
                                                                        display=True
         )
-
+       
         ### Train the model using the foraged data ###
         # Refine our model
         data_in[tab_cpt:tab_cpt+len(data_in_to_add),:] = data_in_to_add
@@ -329,7 +329,9 @@ if __name__=='__main__':
         tab_cpt += len(data_in_to_add)
 
         real_env_evals += 1
-
+        
+        print("Archive delta s: ", learned_env.archive[bh_index].desc)
+        print("Observed delta s: ", np.array(last_obs) - np.array(obs)) 
         ### Advance the tree to the action taken ###
         model.forward(bh_index, last_obs)
         

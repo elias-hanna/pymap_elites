@@ -259,6 +259,8 @@ def run_on_gym_env(env, genotype, horizon, display=False, test_model=False, rese
 
     if reset_env:
       obs = env.reset()
+    else:
+      obs = env.current_pos
 
     if(display):
         env.enable_display()
